@@ -28,7 +28,11 @@ class Exp_Main(Exp_Basic):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
-        model = GCformer.Model(self.args).float()
+        model_dict = {
+            'GCformer': GCformer,
+        }
+        
+        model = model_dict[self.args.model].Model(self.args).float()
 
         if self.args.use_multi_gpu and self.args.use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
@@ -73,21 +77,9 @@ class Exp_Main(Exp_Basic):
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if 'Linear' in self.args.model or 'TST' in self.args.model:
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
-                    if 'Linear' in self.args.model or 'TST' in self.args.model:
-                        outputs, local_x, global_x ,global_bias,local_bias= self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, local_x, global_x ,global_bias,local_bias= self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -155,13 +147,7 @@ class Exp_Main(Exp_Basic):
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if 'Linear' in self.args.model or 'TST' in self.args.model:
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
                         f_dim = -1 if self.args.features == 'MS' else 0
                         outputs = outputs[:, -self.args.pred_len:, f_dim:]
@@ -169,23 +155,12 @@ class Exp_Main(Exp_Basic):
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
-                    if 'Linear' in self.args.model or 'TST' in self.args.model:
-                            #pdb.set_trace()
-                            outputs, local_x, global_x,global_bias,local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                            #print(summary(self.model, batch_x))
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, batch_y)
-                    # print(outputs.shape,batch_y.shape)
+                    outputs, local_x, global_x,global_bias,local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                     kl_loss = nn.KLDivLoss(reduction="batchmean")
-                    #pdb.set_trace()
-                    loss = criterion(outputs, batch_y)# -0.1*criterion(local_x, global_x)#+ kl_loss(-F.log_softmax(local_x),-F.log_softmax(global_x))#0.2*criterion(local_x, batch_y)  #+ 0.2*criterion(global_x, batch_y)
+                    loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -208,14 +183,7 @@ class Exp_Main(Exp_Basic):
                 if self.args.lradj == 'TST':
                     adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args, printout=False)
                     scheduler.step()
-            #pdb.set_trace()
-            #print("local_global:",float(kl_loss(F.log_softmax(local_x+10),F.log_softmax(global_x+10))))
-            #print("local_output:",float(kl_loss(F.log_softmax(local_x+10),F.log_softmax(outputs+10))))
-            #print("output_global:",float(kl_loss(F.log_softmax(outputs+10),F.log_softmax(global_x+10))))
-            #print("output loss:",float(criterion(outputs, batch_y)))
-            #print("local_x loss:",float(criterion(local_x, batch_y)))
-            #print("global_x loss:",float(criterion(global_x, batch_y)))
-            #print("global_x local_x loss:",float(criterion(global_x, local_x)))
+
             
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
@@ -283,22 +251,10 @@ class Exp_Main(Exp_Basic):
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if 'Linear' in self.args.model or 'TST' in self.args.model:
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
-                    if 'Linear' in self.args.model or 'TST' in self.args.model:
-                            outputs, local_x, global_x,global_bias,local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 # print(outputs.shape,batch_y.shape)
