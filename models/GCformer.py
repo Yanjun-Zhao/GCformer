@@ -1,6 +1,3 @@
-__all__ = ['PatchTST']
-
-# Cell
 from typing import Callable, Optional
 import torch
 from torch import nn
@@ -28,9 +25,6 @@ class Model(nn.Module):
         
         # load parameters
         c_in = configs.enc_in
-        self.context_window = configs.context_len
-        target_window = configs.pred_len
-        self.global_layers = configs.global_layers
         n_layers = configs.e_layers
         n_heads = configs.n_heads
         d_model = configs.d_model
@@ -38,20 +32,32 @@ class Model(nn.Module):
         dropout = configs.dropout
         fc_dropout = configs.fc_dropout
         head_dropout = configs.head_dropout
-        
         individual = configs.individual
-    
         patch_len = configs.patch_len
         stride = configs.stride
         padding_patch = configs.padding_patch
-        
-        revin = configs.revin
+        revin = configs.local_revin
         affine = configs.affine
         subtract_last = configs.subtract_last
-        
         decomposition = configs.decomposition
         kernel_size = configs.kernel_size
+        target_window = configs.pred_len
         
+        self.context_window = configs.context_len
+        self.batch_size = configs.batch_size
+        self.enc_in = configs.enc_in
+        self.context_len=configs.context_len
+        self.pred_len=configs.pred_len
+        self.seq_len = configs.seq_len
+        self.norm_type = configs.norm_type
+        self.global_model = configs.global_model
+        self.atten_bias = configs.atten_bias
+        self.TC_bias = configs.TC_bias
+        self.h_token = configs.h_token
+        self.h_channel = configs.h_channel
+        patch_num = int((self.context_window - patch_len)/stride + 1)
+        if padding_patch == 'end':
+            patch_num += 1
         
         
         # model
@@ -84,19 +90,6 @@ class Model(nn.Module):
                                   pretrain_head=pretrain_head, head_type=head_type, individual=individual, revin=revin, affine=affine,
                                   subtract_last=subtract_last, verbose=verbose, **kwargs)
 
-        self.d_model = configs.d_model
-        self.batch_size = configs.batch_size
-        self.enc_in = configs.enc_in
-        self.context_len=configs.context_len
-        self.pred_len=configs.pred_len
-        self.seq_len = configs.seq_len
-        
-        
-        patch_num = int((self.context_window - patch_len)/stride + 1)
-        if padding_patch == 'end':
-            patch_num += 1
-        self.h_token = configs.h_token
-        self.h_channel = configs.h_channel
 
         self.linear_seq_pred = nn.Linear(configs.seq_len, configs.pred_len, bias=True)
         self.linear_channel_out = nn.Linear(self.h_channel, configs.enc_in, bias=True)
@@ -113,25 +106,22 @@ class Model(nn.Module):
         self.decoder_channel = AttentionLayer(
                         decoder_cross_att,
                         self.h_channel,  configs.n_heads)
-        
         self.decoder_token = AttentionLayer(
                         decoder_cross_att,
                         self.h_token,  configs.n_heads)
+        
         if configs.global_model == 'Gconv':
             self.global_layer_Gconv = GConv(configs.batch_size, d_model=configs.enc_in, d_state=configs.enc_in, l_max=configs.seq_len, channels=configs.n_heads, bidirectional=True, kernel_dim=32, n_scales=None, decay_min=2, decay_max=2, transposed=False)
         elif configs.global_model == 'FNO':
             self.global_layer_FNO = nn.Sequential(FNO(1,1,self.enc_in), nn.GELU(), nn.Dropout(configs.dropout))
         elif configs.global_model == 'Film':
             self.global_layer_Film = nn.Sequential(Film(1,1,self.enc_in,self.seq_len,self.pred_len), nn.GELU(), nn.Dropout(configs.dropout))
+        
         self.revin_layer = RevIN(configs.enc_in, affine=True, subtract_last = False)
         self.TCN = TemporalConvNet(configs.enc_in, [configs.h_channel, configs.enc_in])
         self.local_Autoformer = Autoformer.Model(configs)
-        self.norm_type = configs.norm_type
-        self.global_model = configs.global_model
         self.local_bias = nn.Parameter(torch.rand(1)*0.1+configs.local_bias)
         self.global_bias = nn.Parameter(torch.rand(1)*0.1+configs.global_bias)
-        self.atten_bias = configs.atten_bias
-        self.TC_bias = configs.TC_bias
         
     def forward(self, x, batch_x_mark, dec_inp, batch_y_mark):           # x: [Batch, Input length, Channel]
         

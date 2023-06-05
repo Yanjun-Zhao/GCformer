@@ -13,7 +13,7 @@ parser.add_argument('--random_seed', type=int, default=2023, help='random seed')
 # basic config
 parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
 parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
-parser.add_argument('--model', type=str, required=True, default='Autoformer',
+parser.add_argument('--model', type=str, required=True, default='GCformer',
                     help='model name, options: [Autoformer, Informer, Transformer]')
 
 # data loader
@@ -28,8 +28,8 @@ parser.add_argument('--freq', type=str, default='h',
 parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
 # forecasting task
-parser.add_argument('--context_len', type=int, default=96, help='input sequence length for patchTST')
-parser.add_argument('--seq_len', type=int, default=96, help='input sequence length for Gconv')
+parser.add_argument('--context_len', type=int, default=96, help='input sequence length for local_model')
+parser.add_argument('--seq_len', type=int, default=96, help='input sequence length for global_model')
 parser.add_argument('--label_len', type=int, default=48, help='start token length')
 parser.add_argument('--pred_len', type=int, default=96, help='prediction sequence length')
 
@@ -40,17 +40,17 @@ parser.add_argument('--head_dropout', type=float, default=0.0, help='head dropou
 parser.add_argument('--patch_len', type=int, default=16, help='patch length')
 parser.add_argument('--stride', type=int, default=8, help='stride')
 parser.add_argument('--padding_patch', default='end', help='None: None; end: padding on the end')
-parser.add_argument('--revin', type=int, default=0, help='RevIN; True 1 False 0')
+parser.add_argument('--local_revin', type=int, default=0, help='RevIN for local_model(PatchTST)')
 parser.add_argument('--affine', type=int, default=0, help='RevIN-affine; True 1 False 0')
 parser.add_argument('--subtract_last', type=int, default=0, help='0: subtract mean; 1: subtract last')
 parser.add_argument('--decomposition', type=int, default=0, help='decomposition; True 1 False 0')
 parser.add_argument('--kernel_size', type=int, default=25, help='decomposition-kernel')
 parser.add_argument('--individual', type=int, default=1, help='individual head; True 1 False 0')
 
-# Formers 
+# GCFormer 
 parser.add_argument('--embed_type', type=int, default=0, help='0: default 1: value embedding + temporal embedding + positional embedding 2: value embedding + temporal embedding 3: value embedding + positional embedding 4: value embedding')
-parser.add_argument('--enc_in', type=int, default=7, help='encoder input size') # DLinear with --individual, use this hyperparameter as the number of channels
-parser.add_argument('--enc_raw', type=int, default=7, help='encoder input size') # DLinear with --individual, use this hyperparameter as the number of channels
+parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
+parser.add_argument('--enc_raw', type=int, default=7, help='encoder input size')
 parser.add_argument('--dec_in', type=int, default=7, help='decoder input size')
 parser.add_argument('--c_out', type=int, default=7, help='output size')
 parser.add_argument('--d_model', type=int, default=128, help='dimension of model')
@@ -73,19 +73,17 @@ parser.add_argument('--do_predict', action='store_true', help='whether to predic
 parser.add_argument('--h_token', type=int, default=512, help='dimension of model')
 parser.add_argument('--h_channel', type=int, default=32, help='dimension of model')
 
-
 # optimization
 parser.add_argument('--perturb_ratio', type=float, default=0, help='noise ratio')
-#parser.add_argument('--decoder_type', type=str, default='channel', help='token  channel')
 parser.add_argument('--global_model', type=str, default='Gconv', help='Gconv FNO Film')
 parser.add_argument('--norm_type', type=str, default='revin', help='revin  seq_last')
 parser.add_argument('--weight_decay', type=float, default=0, help='dropout')
-parser.add_argument('--local_bias', type=float, default=0.5, help='pred = pred + local_bias*local ')
-parser.add_argument('--global_bias', type=float, default=0.5, help='pred = pred + local_bias*local ')
-parser.add_argument('--atten_bias', type=float, default=0.5, help='atten_bias*(q,kv,kv)+(1-atten_bias) (kv,q,q) ')
-parser.add_argument('--TC_bias', type=float, default=1, help='1:channel 0: token ')
+parser.add_argument('--local_bias', type=float, default=0.5, help='pred = pred + local_bias*local_output')
+parser.add_argument('--global_bias', type=float, default=0.5, help='pred = pred + global_bias*global_output ')
+parser.add_argument('--atten_bias', type=float, default=0.5)
+parser.add_argument('--TC_bias', type=float, default=1, help='1:attention over channel  0:attention over token ')
 parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
-parser.add_argument('--itr', type=int, default=2, help='experiments times')
+parser.add_argument('--itr', type=int, default=3, help='experiments times')
 parser.add_argument('--train_epochs', type=int, default=100, help='train epochs')
 parser.add_argument('--batch_size', type=int, default=128, help='batch size of train input data')
 parser.add_argument('--patience', type=int, default=100, help='early stopping patience')
@@ -103,7 +101,6 @@ parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple g
 parser.add_argument('--devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
 parser.add_argument('--test_flop', action='store_true', default=False, help='See utils/tools for usage')
 
-parser.add_argument('--cal_parameters', type=bool, default=False)
 args = parser.parse_args()
 
 # random seed

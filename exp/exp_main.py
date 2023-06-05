@@ -38,7 +38,7 @@ class Exp_Main(Exp_Basic):
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
         total_num = sum(p.numel() for p in model.parameters())
         trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print("总参数量:",str(total_num),"可训练参数量:",str(trainable_num))
+        print("trainable parameters:", str(trainable_num/1e6), "M")
         return model
 
     def _get_data(self, flag):
@@ -257,14 +257,13 @@ class Exp_Main(Exp_Basic):
                     
 
                 f_dim = -1 if self.args.features == 'MS' else 0
-                # print(outputs.shape,batch_y.shape)
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
-                pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
-                true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
+                pred = outputs  # outputs.detach().cpu().numpy()
+                true = batch_y  # batch_y.detach().cpu().numpy()
 
                 preds.append(pred)
                 trues.append(true)
