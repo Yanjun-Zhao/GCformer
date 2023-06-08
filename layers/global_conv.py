@@ -1,12 +1,6 @@
-# coding=utf-8
-# author=maziqing
-# email=maziqing.mzq@alibaba-inc.com
-
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from layers.Autoformer_EncDec import Encoder, Decoder, EncoderLayer, DecoderLayer, my_Layernorm, series_decomp
 import math
 import numpy as np
 from scipy import signal
@@ -16,9 +10,9 @@ from einops import rearrange, repeat, reduce
 import torch.nn.utils as U
 from omegaconf import DictConfig
 import opt_einsum as oe
-import numpy as np
 from IPython import embed
 from functools import partial
+from layers.Autoformer_EncDec import Encoder, Decoder, EncoderLayer, DecoderLayer, my_Layernorm, series_decomp
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -481,8 +475,6 @@ class GConv(nn.Module):
         self.mode = mode
         self.l_max = l_max
 
-        # optional multiplicative modulation GLU-style
-        # https://arxiv.org/abs/2002.05202
         self.hyper = hyper_act is not None
         if self.hyper:
             channels *= 2

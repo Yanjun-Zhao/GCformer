@@ -9,17 +9,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
-from torch.optim import lr_scheduler 
-
+from torch.optim import lr_scheduler
 import os
 import time
-
 import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import random
 from torchsummary import summary
-import pdb
+
 
 warnings.filterwarnings('ignore')
 
@@ -28,10 +26,7 @@ class Exp_Main(Exp_Basic):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
-        model_dict = {
-            'GCformer': GCformer,
-        }
-        
+        model_dict = {'GCformer': GCformer,}
         model = model_dict[self.args.model].Model(self.args).float()
 
         if self.args.use_multi_gpu and self.args.use_gpu:
@@ -46,13 +41,13 @@ class Exp_Main(Exp_Basic):
         return data_set, data_loader
 
     def _select_optimizer(self):
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate, weight_decay =self.args.weight_decay)
+        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate, weight_decay = self.args.weight_decay)
         return model_optim
 
     def _select_criterion(self):
         criterion = nn.MSELoss()
         return criterion
-    
+
     def get_random_channel(self, x, y):
         channel_index = list(np.arange(0, self.args.enc_in, 1))
         channel_sample = random.sample(channel_index, self.args.enc_raw)
@@ -65,7 +60,6 @@ class Exp_Main(Exp_Basic):
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
-                
                 batch_x, batch_y = self.get_random_channel(batch_x, batch_y)
 
                 batch_x_mark = batch_x_mark.float().to(self.device)
@@ -113,7 +107,7 @@ class Exp_Main(Exp_Basic):
 
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
-            
+
         scheduler = lr_scheduler.OneCycleLR(optimizer = model_optim,
                                             steps_per_epoch = train_steps,
                                             pct_start = self.args.pct_start,
@@ -132,11 +126,10 @@ class Exp_Main(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x, batch_y = self.get_random_channel(batch_x, batch_y)
-                
-                if self.args.perturb_ratio!=0:
-                    #pdb.set_trace()
+
+                if self.args.perturb_ratio != 0:
                     batch_x = self.perturb(batch_x)
-                
+
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
@@ -155,11 +148,11 @@ class Exp_Main(Exp_Basic):
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
-                    outputs, local_x, global_x,global_bias,local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                    kl_loss = nn.KLDivLoss(reduction="batchmean")
+                    kl_loss = nn.KLDivLoss(reduction = "batchmean")
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
@@ -168,7 +161,7 @@ class Exp_Main(Exp_Basic):
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
-                    print("global_bias:{:.3f} local_bias:{:.3f}".format(float(global_bias),float(local_bias)))
+                    print("global_bias:{:.3f} local_bias:{:.3f}".format(float(global_bias), float(local_bias)))
                     iter_count = 0
                     time_now = time.time()
 
@@ -179,12 +172,11 @@ class Exp_Main(Exp_Basic):
                 else:
                     loss.backward()
                     model_optim.step()
-                    
+
                 if self.args.lradj == 'TST':
                     adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args, printout=False)
                     scheduler.step()
 
-            
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion)
@@ -192,7 +184,7 @@ class Exp_Main(Exp_Basic):
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
-            
+
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -207,22 +199,21 @@ class Exp_Main(Exp_Basic):
         self.model.load_state_dict(torch.load(best_model_path))
 
         return self.model
-    
-    def perturb(self,x):
+
+    def perturb(self, x):
         data_num = x.size(0)*x.size(1)*x.size(2)
         noise_num = int(data_num*self.args.perturb_ratio)
-        noise = torch.rand(noise_num).to(self.device)*4-2 #(-2,2)(-0.5,1.5)
+        noise = torch.rand(noise_num).to(self.device)*4-2
         mask = torch.cat((torch.ones(data_num-noise_num).to(self.device),noise))
         #np.random.shuffle(mask.cpu().numpy())
         #mask = torch.reshape(mask,(x.size(0),x.size(1),x.size(2)))
         idx = torch.randperm(data_num)
         mask = mask[idx].view(x.size())
-        #pdb.set_trace()
-        return x*mask
-    
+        return x * mask
+
     def test(self, setting, test=0):
         test_data, test_loader = self._get_data(flag='test')
-        
+
         if test:
             print('loading model')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
@@ -239,7 +230,7 @@ class Exp_Main(Exp_Basic):
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
-                
+
                 batch_x, batch_y = self.get_random_channel(batch_x, batch_y)
 
                 batch_x_mark = batch_x_mark.float().to(self.device)
@@ -254,7 +245,6 @@ class Exp_Main(Exp_Basic):
                         outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
                     outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                    
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
@@ -354,7 +344,5 @@ class Exp_Main(Exp_Basic):
         folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-
         np.save(folder_path + 'real_prediction.npy', preds)
-
         return
