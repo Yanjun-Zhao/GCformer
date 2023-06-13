@@ -71,9 +71,9 @@ class Exp_Main(Exp_Basic):
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x)
                 else:
-                    outputs, local_x, global_x ,global_bias,local_bias= self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, local_x, global_x ,global_bias,local_bias= self.model(batch_x)
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -140,7 +140,7 @@ class Exp_Main(Exp_Basic):
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x)
 
                         f_dim = -1 if self.args.features == 'MS' else 0
                         outputs = outputs[:, -self.args.pred_len:, f_dim:]
@@ -148,11 +148,10 @@ class Exp_Main(Exp_Basic):
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
-                    outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x)
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                    kl_loss = nn.KLDivLoss(reduction = "batchmean")
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
@@ -161,7 +160,7 @@ class Exp_Main(Exp_Basic):
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
-                    print("global_bias:{:.3f} local_bias:{:.3f}".format(float(global_bias), float(local_bias)))
+                    print("\tglobal_bias:{:.3f} local_bias:{:.3f}".format(float(global_bias), float(local_bias)))
                     iter_count = 0
                     time_now = time.time()
 
@@ -205,8 +204,6 @@ class Exp_Main(Exp_Basic):
         noise_num = int(data_num*self.args.perturb_ratio)
         noise = torch.rand(noise_num).to(self.device)*4-2
         mask = torch.cat((torch.ones(data_num-noise_num).to(self.device),noise))
-        #np.random.shuffle(mask.cpu().numpy())
-        #mask = torch.reshape(mask,(x.size(0),x.size(1),x.size(2)))
         idx = torch.randperm(data_num)
         mask = mask[idx].view(x.size())
         return x * mask
@@ -242,9 +239,9 @@ class Exp_Main(Exp_Basic):
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x)
                 else:
-                    outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    outputs, local_x, global_x, global_bias, local_bias = self.model(batch_x)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
@@ -289,10 +286,10 @@ class Exp_Main(Exp_Basic):
         f.write('\n')
         f.close()
 
-        # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
+        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe,rse, corr]))
         np.save(folder_path + 'pred.npy', preds)
-        # np.save(folder_path + 'true.npy', trues)
-        # np.save(folder_path + 'x.npy', inputx)
+        np.save(folder_path + 'true.npy', trues)
+        np.save(folder_path + 'x.npy', inputx)
         return
 
     def predict(self, setting, load=False):
@@ -322,18 +319,12 @@ class Exp_Main(Exp_Basic):
                         if 'Linear' in self.args.model or 'TST' in self.args.model:
                             outputs = self.model(batch_x)
                         else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                            outputs = self.model(batch_x)
                 else:
                     if 'Linear' in self.args.model or 'TST' in self.args.model:
                         outputs = self.model(batch_x)
                     else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs = self.model(batch_x)
                 pred = outputs.detach().cpu().numpy()  # .squeeze()
                 preds.append(pred)
 

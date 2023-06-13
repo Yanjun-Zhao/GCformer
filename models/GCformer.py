@@ -4,17 +4,16 @@ from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
 import numpy as np
-
 from layers.PatchTST_backbone import PatchTST_backbone
 from layers.PatchTST_layers import series_decomp
 from layers.FourierCorrelation import *
 from layers.AutoCorrelation import AutoCorrelation, AutoCorrelationLayer
-from layers.SelfAttention_Family import AttentionLayer, FullAttention, ProbAttention,  LogSparseAttention
+from layers.SelfAttention_Family import AttentionLayer, FullAttention, ProbAttention
 from layers.global_conv import Film, FNO, GConv
 from layers.RevIN import RevIN
 from layers.TCN import TemporalConvNet
 from models import Informer, Autoformer, Transformer, DLinear, Linear, NLinear
-import pdb
+
 
 class Model(nn.Module):
     def __init__(self, configs, max_seq_len:Optional[int]=1024, d_k:Optional[int]=None, d_v:Optional[int]=None, norm:str='BatchNorm', attn_dropout:float=0., 
@@ -119,10 +118,10 @@ class Model(nn.Module):
         self.revin_layer = RevIN(configs.enc_in, affine=True, subtract_last = False)
         self.TCN = TemporalConvNet(configs.enc_in, [configs.h_channel, configs.enc_in])
         self.local_Autoformer = Autoformer.Model(configs)
-        self.local_bias = nn.Parameter(torch.rand(1)*0.1+configs.local_bias)
-        self.global_bias = nn.Parameter(torch.rand(1)*0.1+configs.global_bias)
+        self.local_bias = nn.Parameter(torch.rand(1) * 0.1 + configs.local_bias)
+        self.global_bias = nn.Parameter(torch.rand(1) * 0.1 + configs.global_bias)
 
-    def forward(self, x, batch_x_mark, dec_inp, batch_y_mark):           # x: [Batch, Input length, Channel]
+    def forward(self, x): # x: [Batch, Input length, Channel]
 
         ################### norm
         seq_last = x[:,-1:,:].detach()
@@ -136,49 +135,49 @@ class Model(nn.Module):
         ################### Encoder: global branch
         if self.global_model == 'Gconv':
             global_x = self.global_layer_Gconv(global_x, return_kernel=False)
-            global_x = self.linear_seq_pred(global_x.permute(0,2,1)).permute(0,2,1)
+            global_x = self.linear_seq_pred(global_x.permute(0, 2, 1)).permute(0, 2, 1)
         elif self.global_model == 'FNO':
-            global_x = global_x.permute(0,2,1).unsqueeze(3)
+            global_x = global_x.permute(0, 2, 1).unsqueeze(3)
             global_x = self.global_layer_FNO(global_x)
-            global_x = self.linear_seq_pred(global_x.squeeze(2)).permute(0,2,1)
+            global_x = self.linear_seq_pred(global_x.squeeze(2)).permute(0, 2, 1)
         elif self.global_model == 'Film':
-            global_x = global_x.permute(0,2,1).unsqueeze(3)
+            global_x = global_x.permute(0, 2, 1).unsqueeze(3)
             global_x = self.global_layer_Film(global_x)
-            global_x = self.linear_seq_pred(global_x.squeeze(2)).permute(0,2,1)
+            global_x = self.linear_seq_pred(global_x.squeeze(2)).permute(0, 2, 1)
 
         ################### Encoder: local branch
         if self.decomposition:
             res_init, trend_init = self.decomp_module(local_x)
-            res_init, trend_init = res_init.permute(0,2,1), trend_init.permute(0,2,1)
+            res_init, trend_init = res_init.permute(0, 2, 1), trend_init.permute(0, 2, 1)
             res = self.model_res(res_init)
             trend = self.model_trend(trend_init)
             local_x = res + trend
-            local_x = local_x.permute(0,2,1) # x: [Batch, pred length, Channel]
+            local_x = local_x.permute(0, 2, 1) # x: [Batch, pred length, Channel]
         else:
-            local_x = local_x.permute(0,2,1)
+            local_x = local_x.permute(0, 2, 1)
             local_x = self.model(local_x)
-            local_x = local_x.permute(0,2,1)
+            local_x = local_x.permute(0, 2, 1)
 
         ################### Decoder
-        global_x_ = self.linear_channel_in(global_x)
-        local_x_ = self.linear_channel_in(local_x)
-        output1 = self.ff(self.decoder_channel(global_x_, local_x_, local_x_)) +local_x_
-        output2 = self.ff(self.decoder_channel(local_x_, global_x_, global_x_)) + global_x_
-        output1 = self.norm_channel(output1.permute(0,2,1)).permute(0,2,1)
-        output2 = self.norm_channel(output2.permute(0,2,1)).permute(0,2,1)
-        output = self.atten_bias*output1 + (1-self.atten_bias)*output2
-        output_channel = self.ff(self.linear_channel_out(output))
+        global_x_channel = self.linear_channel_in(global_x)
+        local_x_channel = self.linear_channel_in(local_x)
+        output_channel_l = self.ff(self.decoder_channel(global_x_channel, local_x_channel, local_x_channel)) + local_x_channel
+        output_channel_g = self.ff(self.decoder_channel(local_x_channel, global_x_channel, global_x_channel)) + global_x_channel
+        output_channel_l = self.norm_channel(output_channel_l.permute(0, 2, 1)).permute(0, 2, 1)
+        output_channel_g = self.norm_channel(output_channel_g.permute(0, 2, 1)).permute(0, 2, 1)
+        output_channel = self.atten_bias * output_channel_l + (1 - self.atten_bias) * output_channel_g
+        output_channel = self.ff(self.linear_channel_out(output_channel))
 
-        global_x_ = self.linear_token_in(global_x.permute(0,2,1))
-        local_x_ = self.linear_token_in(local_x.permute(0,2,1))
-        output1 = self.ff(self.decoder_token(global_x_, local_x_, local_x_)) +local_x_
-        output2 = self.ff(self.decoder_token(local_x_, global_x_, global_x_)) + global_x_
-        output1 = self.norm_token(output1.permute(0,2,1)).permute(0,2,1)
-        output2 = self.norm_token(output2.permute(0,2,1)).permute(0,2,1)
-        output = self.atten_bias*output1 + (1-self.atten_bias)*output2 
-        output_token = self.ff(self.linear_token_out(output).permute(0,2,1)) 
+        global_x_token = self.linear_token_in(global_x.permute(0, 2, 1))
+        local_x_token = self.linear_token_in(local_x.permute(0, 2, 1))
+        output_token_l = self.ff(self.decoder_token(global_x_token, local_x_token, local_x_token)) + local_x_token
+        output_token_g = self.ff(self.decoder_token(local_x_token, global_x_token, global_x_token)) + global_x_token
+        output_token_l = self.norm_token(output_token_l.permute(0, 2, 1)).permute(0, 2, 1)
+        output_token_g = self.norm_token(output_token_g.permute(0, 2, 1)).permute(0, 2, 1)
+        output_token = self.atten_bias * output_token_l + (1 - self.atten_bias) * output_token_g 
+        output_token = self.ff(self.linear_token_out(output_token).permute(0, 2, 1)) 
 
-        output = self.TC_bias * output_channel + (1-self.TC_bias) * output_token + self.global_bias*global_x + self.local_bias*local_x
+        output = self.TC_bias * output_channel + (1 - self.TC_bias) * output_token + self.global_bias * global_x + self.local_bias * local_x
 
         ################### denorm
         if self.norm_type == 'revin':

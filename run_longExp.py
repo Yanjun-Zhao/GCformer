@@ -11,8 +11,6 @@ parser = argparse.ArgumentParser(description='Autoformer & Transformer family fo
 parser.add_argument('--random_seed', type=int, default=2023, help='random seed')
 
 # basic config
-parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
-parser.add_argument('--model_id', type=str, required=True, default='test', help='model id')
 parser.add_argument('--model', type=str, required=True, default='GCformer',
                     help='model name, options: [Autoformer, Informer, Transformer]')
 
@@ -68,7 +66,6 @@ parser.add_argument('--dropout', type=float, default=0.05, help='dropout')
 parser.add_argument('--embed', type=str, default='timeF',
                     help='time features encoding, options:[timeF, fixed, learned]')
 parser.add_argument('--activation', type=str, default='gelu', help='activation')
-parser.add_argument('--output_attention', action='store_true', help='whether to output attention in ecoder')
 parser.add_argument('--do_predict', action='store_true', help='whether to predict unseen future data')
 parser.add_argument('--h_token', type=int, default=512, help='dimension of model')
 parser.add_argument('--h_channel', type=int, default=32, help='dimension of model')
@@ -123,11 +120,9 @@ print(args)
 
 Exp = Exp_Main
 
-if args.is_training:
-    for ii in range(args.itr):
-        # setting record of experiments
-        setting = '{}_{}_{}_{}_sl{}_cl{}_pl{}_nchannel{}_ntoken{}_nhead{}_d{}_df{}el{}_dl{}_attenBias{}_TCbias{}_dp{}_Lbias{}_Gbias{}_{}_noise{}_decay{}_lr{}_decompose{}_individual{}'.format(
-            args.model_id,
+for ii in range(args.itr):
+    # setting record of experiments
+    setting = '{}_{}_{}_sl{}_cl{}_pl{}_nchannel{}_ntoken{}_nhead{}_d{}_df{}el{}_dl{}_attenBias{}_TCbias{}_dp{}_Lbias{}_Gbias{}_{}_noise{}_decay{}_lr{}_decompose{}_individual{}'.format(
             args.model,
             args.global_model,
             args.data,
@@ -151,43 +146,18 @@ if args.is_training:
             args.weight_decay,
             args.learning_rate,
             args.decomposition,
-            args.individual
-            
-            
+            args.individual       
 )
 
-        exp = Exp(args)  # set experiments
-        print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-        exp.train(setting)
-
-        print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting)
-
-        if args.do_predict:
-            print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.predict(setting, True)
-
-        torch.cuda.empty_cache()
-else:
-    ii = 0
-    setting = '{}_{}_{}_ft{}_sl{}_cl{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(args.model_id,
-                                                                                                  args.model,
-                                                                                                  args.data,
-                                                                                                  args.features,
-                                                                                                  args.seq_len,
-                                                                                                  args.context_len,
-                                                                                                  args.pred_len,
-                                                                                                  args.d_model,
-                                                                                                  args.n_heads,
-                                                                                                  args.e_layers,
-                                                                                                  args.d_layers,
-                                                                                                  args.d_ff,
-                                                                                                  args.factor,
-                                                                                                  args.embed,
-                                                                                                  args.distil,
-                                                                                                  args.des, ii)
-
     exp = Exp(args)  # set experiments
+    print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
+    exp.train(setting)
+
     print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-    exp.test(setting, test=1)
+    exp.test(setting)
+
+    if args.do_predict:
+        print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+        exp.predict(setting, True)
+
     torch.cuda.empty_cache()
